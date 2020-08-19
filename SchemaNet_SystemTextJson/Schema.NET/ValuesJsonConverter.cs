@@ -3,18 +3,50 @@
     using System;
     using System.Collections.Generic;
     using System.Diagnostics;
+    using System.Diagnostics.CodeAnalysis;
     using System.Globalization;
     using System.Reflection;
     using System.Text.Json;
     using System.Text.Json.Serialization;
     using System.Xml;
 
+
+    public class OneOrManyJsonConverter<T> : JsonConverter<OneOrMany<T>>
+    {
+        [return: MaybeNull]
+        public override OneOrMany<T> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            return (OneOrMany<T>)ValuesJsonConverter.Instance.Read(ref reader, typeToConvert, options);
+        }
+
+        public override void Write(Utf8JsonWriter writer, OneOrMany<T> value, JsonSerializerOptions options)
+        {
+            ValuesJsonConverter.Instance.Write(writer, value, options);
+        }
+    }
+
+    public class ValuesJsonConverter<T1, T2> : JsonConverter<Values<T1, T2>>
+    {
+        [return: MaybeNull]
+        public override Values<T1, T2> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            return (Values<T1, T2>)ValuesJsonConverter.Instance.Read(ref reader, typeToConvert, options);
+        }
+
+        public override void Write(Utf8JsonWriter writer, Values<T1, T2> value, JsonSerializerOptions options)
+        {
+            ValuesJsonConverter.Instance.Write(writer, value, options);
+        }
+    }
+
     /// <summary>
     /// Converts a <see cref="IValues"/> object to and from JSON.
     /// </summary>
     /// <seealso cref="JsonConverter" />
-    public class ValuesJsonConverter : JsonConverter<IValues>
+    internal class ValuesJsonConverter : JsonConverter<IValues>
     {
+        public static readonly ValuesJsonConverter Instance = new ValuesJsonConverter();
+
         private static readonly Dictionary<string, Type> BuiltInThingTypeLookup = new Dictionary<string, Type>(StringComparer.Ordinal);
 
         static ValuesJsonConverter()
@@ -28,6 +60,9 @@
                 }
             }
         }
+
+        private ValuesJsonConverter()
+        { }
 
         /// <inheritdoc />
         public override bool CanConvert(Type typeToConvert) => typeof(IValues).IsAssignableFrom(typeToConvert);
@@ -224,7 +259,12 @@
             if (tokenType == JsonTokenType.String)
             {
                 var valueString = reader.GetString();
-                if (targetType.GetTypeInfo().IsPrimitive)
+                if (targetType == typeof(string))
+                {
+                    success = true;
+                    result = valueString;
+                }
+                else if (targetType.GetTypeInfo().IsPrimitive)
                 {
                     if (targetType == typeof(int))
                     {
